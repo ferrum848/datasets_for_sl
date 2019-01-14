@@ -118,22 +118,6 @@ def color_to_gray(new_mask, obj):
 #===============================================================================
 #===============================================================================
 
-vidcap = cv2.VideoCapture('/work/datasets/graz/vid/airplane_poly_ass.mkv')
-success, image = vidcap.read()
-
-length = int(vidcap.get(cv2.CAP_PROP_FRAME_COUNT))
-print(length)
-
-count = 0
-success = True
-while success:
-    success, image = vidcap.read()
-    print('Read a new frame: ', success,count)
-    cv2.imwrite('/work/datasets/graz/vid/11/frame%d.jpg' % count, image)
-    count += 1
-'''
-
-
 mask = []
 with open('/work/datasets/video/colors') as file:
     for line in file:
@@ -149,7 +133,7 @@ for i in mask:
 for i, j in image_class.items():
     image_regions[(j[0] * 1000000) + (j[1] * 1000) + j[2]] = i
 #print(image_regions)
-'''
+
 #make meta.json
 classes = []
 for title, color in image_class.items():
@@ -157,7 +141,7 @@ for title, color in image_class.items():
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
 json_dump(meta, '/work/datasets/video/my_project/meta.json')
-'''
+
 
 
 for object in os.listdir('/work/datasets/video/701_StillsRaw_full/'):
@@ -203,4 +187,3 @@ for object in os.listdir('/work/datasets/video/701_StillsRaw_full/'):
                     "points": {"interior": [], "exterior": []}}
             foto_objects.append(temp)
     json_dump(json_for_image, '/work/datasets/video/my_project/dataset/ann/' + name + '.json')
-'''
