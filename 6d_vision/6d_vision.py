@@ -45,8 +45,10 @@ def unique_color(image):
 
 
 def unique_color_new(image):
+    start = time.time()
     a = np.unique(image.reshape(-1, image.shape[2]), axis=0)
     result = np.array(a).tolist()
+    print('unique_color_new  ', time.time() - start)
     return result
 
 
@@ -100,6 +102,11 @@ def coords_alternative(mask, obj):
 
 
 def color_to_gray(new_mask, obj):
+    if obj == 0:
+        new_mask = np.where(new_mask != obj, new_mask, 777)
+        new_mask = np.where(new_mask == 777, new_mask, 0)
+        new_mask = np.where(new_mask != 777, new_mask, 123123123)
+        obj = 123123123
     obj1 = (obj - obj%1000000) // 1000000
     obj2 = (obj%1000000 - obj%1000) // 1000
     obj3 = obj%1000
@@ -118,69 +125,63 @@ def color_to_gray(new_mask, obj):
 #===============================================================================
 #===============================================================================
 
-mask = []
-with open('/work/datasets/video/colors') as file:
-    for line in file:
-        line = line.split('\n')[0]
-        line = line.split(' ')
-        line[2] = line[2].split('\t')
-        mask.append(line)
-image_class, image_regions = {}, {}
-for i in mask:
-    image_class[i[2][1]] = (int(i[0]), int(i[1]), int(i[2][0]))
-#print(image_class)
 
-for i, j in image_class.items():
-    image_regions[(j[0] * 1000000) + (j[1] * 1000) + j[2]] = i
-#print(image_regions)
+image_class = {'obj0': [0, 0, 0], 'obj1': [20, 20, 20], 'obj2': [40, 40, 40], 'obj3': [80, 80, 80], 'obj4': [160, 160, 160], 'obj5': [255, 255, 255], 'obj6': [100, 100, 100], 'obj7': [140, 140, 140], 'obj8': [60, 60, 60], 'obj9': [240, 240, 240]}
+image_regions = {0: 'obj0', 1001001: 'obj1', 2002002: 'obj2', 4004004: 'obj3', 8008008: 'obj4', 255255255: 'obj5', 5005005: 'obj6', 7007007: 'obj7', 3003003: 'obj8', 12012012: 'obj9'}
 
-#make meta.json
+
+
 classes = []
 for title, color in image_class.items():
     temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
-json_dump(meta, '/work/datasets/video/my_project/meta.json')
+json_dump(meta, '/work/datasets/graz/6d/my_project/meta.json')
 
 
+runner = os.walk('/work/datasets/graz/6d/original_foto/')
 
-for object in os.listdir('/work/datasets/video/701_StillsRaw_full/'):
-    name = object[:-4]
-    print(name)
-    shutil.copy('/work/datasets/video/701_StillsRaw_full/' + object, '/work/datasets/video/my_project/dataset/img/' + object)
-    image = cv2.imread('/work/datasets/video/video_labels/' + name + '_L.png')
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    image = np.array(image, dtype=np.uint32)
-    new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
-    new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
+sch = 1
+for dir, subdir, file in runner:
+    if len(file) == 0:
+        continue
+    for object in os.listdir(dir + '/'):
+        name = object[:-4] #imgleft000000009
+        print(name) #label000000009
+        im = cv2.imread(dir + '/' + object)
+        im *= 12
+        image = cv2.imread(dir[:23] + 'labels_foto' + dir[36:-7] + 'groundtruth/' + 'label' + name[-9:] + '.pgm')
+        #image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = np.array(image, dtype=np.uint32)
+        new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
+        new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
 
-    foto_objects = []
-    json_for_image = {'tags': [],
-                       'description': '',
-                        'objects': foto_objects,
-                              'size': {
-                                  'width': image.shape[1],
-                                  'height': image.shape[0] }}
-    for obj in np.unique(new_mask):
-        if obj == 0:
-            continue
-        try:
+        foto_objects = []
+        json_for_image = {'tags': [],
+                           'description': '',
+                            'objects': foto_objects,
+                                  'size': {
+                                      'width': image.shape[1],
+                                      'height': image.shape[0] }}
+        for obj in np.unique(new_mask):
             classTitle = image_regions[obj]
-        except Exception:
-            continue
-        classTitle = image_regions[obj]
-        mask, obj_new = color_to_gray(new_mask, obj)
-        left_coner, mask_bool = coords_alternative(mask, obj_new)
-        for i in range(len(left_coner)):
-            mask_bool[i] = mask_bool[i].astype(np.bool)
-            data = mask_2_base64(mask_bool[i])
-            temp = {"bitmap":
-                        {"origin": [left_coner[i][1], left_coner[i][0]],
-                         "data": data},
-                    "type": "bitmap",
-                    "classTitle": classTitle,
-                    "description": "",
-                    "tags": [],
-                    "points": {"interior": [], "exterior": []}}
-            foto_objects.append(temp)
-    json_dump(json_for_image, '/work/datasets/video/my_project/dataset/ann/' + name + '.json')
+            if len(np.unique(new_mask)) == 1:
+                continue
+            mask, obj_new = color_to_gray(new_mask, obj)
+            left_coner, mask_bool = coords_alternative(mask, obj_new)
+            for i in range(len(left_coner)):
+                mask_bool[i] = mask_bool[i].astype(np.bool)
+                data = mask_2_base64(mask_bool[i])
+                temp = {"bitmap":
+                            {"origin": [left_coner[i][1], left_coner[i][0]],
+                             "data": data},
+                        "type": "bitmap",
+                        "classTitle": classTitle,
+                        "description": "",
+                        "tags": [],
+                        "points": {"interior": [], "exterior": []}}
+                foto_objects.append(temp)
+        json_dump(json_for_image, '/work/datasets/graz/6d/my_project/dataset/ann/' + str(sch) + name + '.json')
+        #shutil.copy(dir + '/' + object, '/work/datasets/graz/6d/my_project/dataset/img/' + str(sch) + name + '.png')
+        cv2.imwrite('/work/datasets/graz/6d/my_project/dataset/img/' + str(sch) + name + '.jpg', im)
+        sch += 1

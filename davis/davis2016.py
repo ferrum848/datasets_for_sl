@@ -118,69 +118,60 @@ def color_to_gray(new_mask, obj):
 #===============================================================================
 #===============================================================================
 
-mask = []
-with open('/work/datasets/video/colors') as file:
-    for line in file:
-        line = line.split('\n')[0]
-        line = line.split(' ')
-        line[2] = line[2].split('\t')
-        mask.append(line)
-image_class, image_regions = {}, {}
-for i in mask:
-    image_class[i[2][1]] = (int(i[0]), int(i[1]), int(i[2][0]))
-#print(image_class)
+image_class = {'fon': (255, 0, 0),
+              'object': (0, 255, 255)}
 
-for i, j in image_class.items():
-    image_regions[(j[0] * 1000000) + (j[1] * 1000) + j[2]] = i
-#print(image_regions)
+image_regions = {777: 'fon',
+            255255255: 'object'}
 
-#make meta.json
 classes = []
 for title, color in image_class.items():
     temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
-json_dump(meta, '/work/datasets/video/my_project/meta.json')
+json_dump(meta, '/work/datasets/DAVIS2016/my_project/meta.json')
 
+runner = os.walk('/work/datasets/DAVIS2016/JPEGImages/480p/')
+sch = 1
+for dir, subdir, file in runner:
+    if len(file) == 0:
+        continue
+    for object in os.listdir(dir + '/'):
+        name = object[:-4]
+        print(name)
+        image = cv2.imread(dir[:25] + 'Annotations' + dir[35:] + '/' + name + '.png')
+        #image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = np.array(image, dtype=np.uint32)
+        new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
+        new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
+        new_mask = np.where(new_mask != 0, new_mask, 777)
 
-
-for object in os.listdir('/work/datasets/video/701_StillsRaw_full/'):
-    name = object[:-4]
-    print(name)
-    shutil.copy('/work/datasets/video/701_StillsRaw_full/' + object, '/work/datasets/video/my_project/dataset/img/' + object)
-    image = cv2.imread('/work/datasets/video/video_labels/' + name + '_L.png')
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    image = np.array(image, dtype=np.uint32)
-    new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
-    new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
-
-    foto_objects = []
-    json_for_image = {'tags': [],
-                       'description': '',
-                        'objects': foto_objects,
-                              'size': {
-                                  'width': image.shape[1],
-                                  'height': image.shape[0] }}
-    for obj in np.unique(new_mask):
-        if obj == 0:
-            continue
-        try:
+        foto_objects = []
+        json_for_image = {'tags': [],
+                           'description': '',
+                            'objects': foto_objects,
+                                  'size': {
+                                      'width': image.shape[1],
+                                      'height': image.shape[0] }}
+        for obj in np.unique(new_mask):
             classTitle = image_regions[obj]
-        except Exception:
-            continue
-        classTitle = image_regions[obj]
-        mask, obj_new = color_to_gray(new_mask, obj)
-        left_coner, mask_bool = coords_alternative(mask, obj_new)
-        for i in range(len(left_coner)):
-            mask_bool[i] = mask_bool[i].astype(np.bool)
-            data = mask_2_base64(mask_bool[i])
-            temp = {"bitmap":
-                        {"origin": [left_coner[i][1], left_coner[i][0]],
-                         "data": data},
-                    "type": "bitmap",
-                    "classTitle": classTitle,
-                    "description": "",
-                    "tags": [],
-                    "points": {"interior": [], "exterior": []}}
-            foto_objects.append(temp)
-    json_dump(json_for_image, '/work/datasets/video/my_project/dataset/ann/' + name + '.json')
+            if len(np.unique(new_mask)) == 1:
+                continue
+            mask, obj_new = color_to_gray(new_mask, obj)
+            left_coner, mask_bool = coords_alternative(mask, obj_new)
+            for i in range(len(left_coner)):
+                mask_bool[i] = mask_bool[i].astype(np.bool)
+                data = mask_2_base64(mask_bool[i])
+                temp = {"bitmap":
+                            {"origin": [left_coner[i][1], left_coner[i][0]],
+                             "data": data},
+                        "type": "bitmap",
+                        "classTitle": classTitle,
+                        "description": "",
+                        "tags": [],
+                        "points": {"interior": [], "exterior": []}}
+                foto_objects.append(temp)
+        json_dump(json_for_image, '/work/datasets/DAVIS2016/my_project/dataset/ann/' + str(sch) + name + '.json')
+        shutil.copy(dir + '/' + object, '/work/datasets/DAVIS2016/my_project/dataset/img/' + str(sch) + object)
+        sch += 1
+

@@ -100,6 +100,11 @@ def coords_alternative(mask, obj):
 
 
 def color_to_gray(new_mask, obj):
+    if obj == 0:
+        new_mask = np.where(new_mask != obj, new_mask, 777)
+        new_mask = np.where(new_mask == 777, new_mask, 0)
+        new_mask = np.where(new_mask != 777, new_mask, 123123123)
+        obj = 123123123
     obj1 = (obj - obj%1000000) // 1000000
     obj2 = (obj%1000000 - obj%1000) // 1000
     obj3 = obj%1000
@@ -113,26 +118,21 @@ def color_to_gray(new_mask, obj):
     mask = cv2.merge((ch1, ch3, ch2))
     mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     return mask, np.unique(mask)[1]
-
 #===============================================================================
 #===============================================================================
 #===============================================================================
 
-mask = []
-with open('/work/datasets/video/colors') as file:
-    for line in file:
-        line = line.split('\n')[0]
-        line = line.split(' ')
-        line[2] = line[2].split('\t')
-        mask.append(line)
-image_class, image_regions = {}, {}
-for i in mask:
-    image_class[i[2][1]] = (int(i[0]), int(i[1]), int(i[2][0]))
-#print(image_class)
 
+
+image_class = {}
+for i in range(256):
+    temp = 'obj' + str(i)
+    image_class[temp] = (i, i, i)
+
+image_regions = {}
 for i, j in image_class.items():
-    image_regions[(j[0] * 1000000) + (j[1] * 1000) + j[2]] = i
-#print(image_regions)
+    image_regions[j[0]] = i
+
 
 #make meta.json
 classes = []
@@ -140,47 +140,45 @@ for title, color in image_class.items():
     temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
-json_dump(meta, '/work/datasets/video/my_project/meta.json')
+json_dump(meta, '/work/datasets/coco/my_project/meta.json')
 
 
-
-for object in os.listdir('/work/datasets/video/701_StillsRaw_full/'):
+for object in os.listdir('/work/datasets/coco/val2017/'):
     name = object[:-4]
     print(name)
-    shutil.copy('/work/datasets/video/701_StillsRaw_full/' + object, '/work/datasets/video/my_project/dataset/img/' + object)
-    image = cv2.imread('/work/datasets/video/video_labels/' + name + '_L.png')
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    shutil.copy('/work/datasets/coco/val2017/' + object, '/work/datasets/coco/my_project/dataset/img/' + object)
+    image = cv2.imread('/work/datasets/coco/stuffthingmaps_trainval2017/val2017/' + name + '.png')
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     image = np.array(image, dtype=np.uint32)
-    new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
-    new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
 
     foto_objects = []
     json_for_image = {'tags': [],
-                       'description': '',
-                        'objects': foto_objects,
-                              'size': {
-                                  'width': image.shape[1],
-                                  'height': image.shape[0] }}
-    for obj in np.unique(new_mask):
-        if obj == 0:
-            continue
-        try:
-            classTitle = image_regions[obj]
-        except Exception:
-            continue
+                      'description': '',
+                      'objects': foto_objects,
+                      'size': {
+                          'width': image.shape[1],
+                          'height': image.shape[0]
+                      }}
+
+    for obj in np.unique(image):
         classTitle = image_regions[obj]
-        mask, obj_new = color_to_gray(new_mask, obj)
-        left_coner, mask_bool = coords_alternative(mask, obj_new)
+        if obj == 255:
+            continue
+        if len(np.unique(image)) == 1:
+            continue
+        mask_bool, obj = color_to_gray(image, obj)
+        left_coner, mask_bool = coords_alternative(mask_bool, obj)
         for i in range(len(left_coner)):
             mask_bool[i] = mask_bool[i].astype(np.bool)
             data = mask_2_base64(mask_bool[i])
             temp = {"bitmap":
-                        {"origin": [left_coner[i][1], left_coner[i][0]],
-                         "data": data},
-                    "type": "bitmap",
-                    "classTitle": classTitle,
-                    "description": "",
-                    "tags": [],
-                    "points": {"interior": [], "exterior": []}}
+                    {"origin": [left_coner[i][1], left_coner[i][0]],
+                        "data": data},
+                        "type": "bitmap",
+                        "classTitle": classTitle,
+                        "description": "",
+                        "tags": [],
+                        "points": {"interior": [], "exterior": []}}
             foto_objects.append(temp)
-    json_dump(json_for_image, '/work/datasets/video/my_project/dataset/ann/' + name + '.json')
+    json_dump(json_for_image, '/work/datasets/coco/my_project/dataset/ann/' + name + '.json')
+

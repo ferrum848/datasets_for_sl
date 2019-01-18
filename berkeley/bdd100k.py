@@ -100,6 +100,11 @@ def coords_alternative(mask, obj):
 
 
 def color_to_gray(new_mask, obj):
+    if obj == 0:
+        new_mask = np.where(new_mask != obj, new_mask, 777)
+        new_mask = np.where(new_mask == 777, new_mask, 0)
+        new_mask = np.where(new_mask != 777, new_mask, 123123123)
+        obj = 123123123
     obj1 = (obj - obj%1000000) // 1000000
     obj2 = (obj%1000000 - obj%1000) // 1000
     obj3 = obj%1000
@@ -113,62 +118,56 @@ def color_to_gray(new_mask, obj):
     mask = cv2.merge((ch1, ch3, ch2))
     mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     return mask, np.unique(mask)[1]
-
 #===============================================================================
 #===============================================================================
 #===============================================================================
 
-mask = []
-with open('/work/datasets/video/colors') as file:
-    for line in file:
-        line = line.split('\n')[0]
-        line = line.split(' ')
-        line[2] = line[2].split('\t')
-        mask.append(line)
+
+
+colors = [[0, 0, 0], [0, 220, 220], [35, 142, 107], [70, 70, 70], [128, 64, 128], [142, 0, 0], [153, 153, 153], [153, 153, 190], [180, 130, 70], [232, 35, 244], [30, 170, 250], [100, 60, 0], [60, 20, 220], [0, 0, 255], [32, 11, 119], [70, 0, 0], [152, 251, 152], [230, 0, 0], [156, 102, 102], [100, 80, 0]]
+
+
 image_class, image_regions = {}, {}
-for i in mask:
-    image_class[i[2][1]] = (int(i[0]), int(i[1]), int(i[2][0]))
-#print(image_class)
+for i in range(len(colors)):
+    image_class['obj' + str(i)] = colors[i]
 
 for i, j in image_class.items():
     image_regions[(j[0] * 1000000) + (j[1] * 1000) + j[2]] = i
-#print(image_regions)
 
-#make meta.json
+
 classes = []
 for title, color in image_class.items():
     temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
-json_dump(meta, '/work/datasets/video/my_project/meta.json')
+json_dump(meta, '/work/datasets/berkeley/my_project_val/meta.json')
 
 
 
-for object in os.listdir('/work/datasets/video/701_StillsRaw_full/'):
+
+for object in os.listdir('/work/datasets/berkeley/bdd100k/seg/images/val/'):
     name = object[:-4]
     print(name)
-    shutil.copy('/work/datasets/video/701_StillsRaw_full/' + object, '/work/datasets/video/my_project/dataset/img/' + object)
-    image = cv2.imread('/work/datasets/video/video_labels/' + name + '_L.png')
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image = cv2.imread('/work/datasets/berkeley/bdd100k/seg/color_labels/val/' + name + '_train_color.png')
+    #image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image = np.array(image, dtype=np.uint32)
     new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
     new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
+    #new_mask = np.where(new_mask != 0, new_mask, 321)
 
     foto_objects = []
     json_for_image = {'tags': [],
-                       'description': '',
-                        'objects': foto_objects,
-                              'size': {
-                                  'width': image.shape[1],
-                                  'height': image.shape[0] }}
+	                    'description': '',
+	                    'objects': foto_objects,
+	                    'size': {
+	                    'width': image.shape[1],
+	                    'height': image.shape[0]
+	                      }}
+
     for obj in np.unique(new_mask):
-        if obj == 0:
-            continue
-        try:
-            classTitle = image_regions[obj]
-        except Exception:
-            continue
         classTitle = image_regions[obj]
+        if len(np.unique(new_mask)) == 1:
+            continue
         mask, obj_new = color_to_gray(new_mask, obj)
         left_coner, mask_bool = coords_alternative(mask, obj_new)
         for i in range(len(left_coner)):
@@ -183,4 +182,8 @@ for object in os.listdir('/work/datasets/video/701_StillsRaw_full/'):
                     "tags": [],
                     "points": {"interior": [], "exterior": []}}
             foto_objects.append(temp)
-    json_dump(json_for_image, '/work/datasets/video/my_project/dataset/ann/' + name + '.json')
+    json_dump(json_for_image, '/work/datasets/berkeley/my_project_val/dataset/ann/' + name + '.json')
+    shutil.copy('/work/datasets/berkeley/bdd100k/seg/images/val/' + name + '.jpg',
+                '/work/datasets/berkeley/my_project_val/dataset/img/' + name + '.jpg')
+
+

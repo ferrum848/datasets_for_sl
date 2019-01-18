@@ -45,8 +45,10 @@ def unique_color(image):
 
 
 def unique_color_new(image):
+    start = time.time()
     a = np.unique(image.reshape(-1, image.shape[2]), axis=0)
     result = np.array(a).tolist()
+    print('unique_color_new  ', time.time() - start)
     return result
 
 
@@ -110,77 +112,70 @@ def color_to_gray(new_mask, obj):
     ch1 = np.array(ch1, dtype=np.uint8)
     ch2 = np.array(ch2, dtype=np.uint8)
     ch3 = np.array(ch3, dtype=np.uint8)
-    mask = cv2.merge((ch1, ch3, ch2))
+    mask = cv2.merge((ch1, ch2, ch3))
     mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     return mask, np.unique(mask)[1]
-
 #===============================================================================
 #===============================================================================
 #===============================================================================
 
-mask = []
-with open('/work/datasets/video/colors') as file:
-    for line in file:
-        line = line.split('\n')[0]
-        line = line.split(' ')
-        line[2] = line[2].split('\t')
-        mask.append(line)
-image_class, image_regions = {}, {}
-for i in mask:
-    image_class[i[2][1]] = (int(i[0]), int(i[1]), int(i[2][0]))
-#print(image_class)
+import csv
 
-for i, j in image_class.items():
-    image_regions[(j[0] * 1000000) + (j[1] * 1000) + j[2]] = i
-#print(image_regions)
+FILENAME = "/work/datasets/Driving_Dataset/object-detection-crowdai/labels.csv"
+slovar ={}
+with open(FILENAME, "r", newline="") as file:
+    reader = csv.reader(file)
+    for row in reader:
+        if row[4] != 'Frame':
+            if row[4] not in slovar.keys():
+                slovar[row[4]] = [[int(row[0]), int(row[1])], [int(row[2]), int(row[3])], row[5]]
+            else:
+                slovar[row[4]].extend([[int(row[0]), int(row[1])], [int(row[2]), int(row[3])], row[5]])
+
+
+image_class = {'Car': (255, 0, 0),
+               'Truck': (0, 0, 255),
+               'Pedestrian': (255, 0, 255)}
 
 #make meta.json
 classes = []
 for title, color in image_class.items():
-    temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
+    temp = {'title': title, 'shape': 'rectangle', 'color': color2code(color)}
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
-json_dump(meta, '/work/datasets/video/my_project/meta.json')
+json_dump(meta, '/work/datasets/Driving_Dataset/my_project/meta.json')
 
 
-
-for object in os.listdir('/work/datasets/video/701_StillsRaw_full/'):
+for object in os.listdir('/work/datasets/Driving_Dataset/object-detection-crowdai/'):
     name = object[:-4]
     print(name)
-    shutil.copy('/work/datasets/video/701_StillsRaw_full/' + object, '/work/datasets/video/my_project/dataset/img/' + object)
-    image = cv2.imread('/work/datasets/video/video_labels/' + name + '_L.png')
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    image = np.array(image, dtype=np.uint32)
-    new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
-    new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
+    if object.endswith('csv'):
+        continue
+    image = cv2.imread('/work/datasets/Driving_Dataset/object-detection-crowdai/' + object)
 
     foto_objects = []
     json_for_image = {'tags': [],
-                       'description': '',
+                        'description': '',
                         'objects': foto_objects,
-                              'size': {
-                                  'width': image.shape[1],
-                                  'height': image.shape[0] }}
-    for obj in np.unique(new_mask):
-        if obj == 0:
-            continue
-        try:
-            classTitle = image_regions[obj]
-        except Exception:
-            continue
-        classTitle = image_regions[obj]
-        mask, obj_new = color_to_gray(new_mask, obj)
-        left_coner, mask_bool = coords_alternative(mask, obj_new)
-        for i in range(len(left_coner)):
-            mask_bool[i] = mask_bool[i].astype(np.bool)
-            data = mask_2_base64(mask_bool[i])
-            temp = {"bitmap":
-                        {"origin": [left_coner[i][1], left_coner[i][0]],
-                         "data": data},
-                    "type": "bitmap",
-                    "classTitle": classTitle,
-                    "description": "",
-                    "tags": [],
-                    "points": {"interior": [], "exterior": []}}
+                        'size': {
+                        'width': image.shape[1],
+                     'height': image.shape[0] }}
+    try:
+        for i in range(0, len(slovar[object]), 3):
+            temp = {"bitmap": None,
+                            "type": "rectangle",
+                            "classTitle": slovar[object][i + 2],
+                            "description": "",
+                            "tags": [],
+                            "points": {"interior": [], "exterior": [slovar[object][i], slovar[object][i + 1]]}}
             foto_objects.append(temp)
-    json_dump(json_for_image, '/work/datasets/video/my_project/dataset/ann/' + name + '.json')
+        json_dump(json_for_image, '/work/datasets/Driving_Dataset/my_project/dataset/ann/' + name + '.json')
+        shutil.copy('/work/datasets/Driving_Dataset/object-detection-crowdai/' + object,
+                    '/work/datasets/Driving_Dataset/my_project/dataset/img/' + object)
+    except KeyError:
+        continue
+
+
+
+
+

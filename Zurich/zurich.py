@@ -1,5 +1,5 @@
 import numpy as np
-import cv2, random, os, time, json, base64, zlib, shutil
+import cv2, random, os, time, json, base64, zlib
 from PIL import Image
 import scipy.io
 import io
@@ -45,8 +45,10 @@ def unique_color(image):
 
 
 def unique_color_new(image):
+    start = time.time()
     a = np.unique(image.reshape(-1, image.shape[2]), axis=0)
     result = np.array(a).tolist()
+    print('unique_color_new  ', time.time() - start)
     return result
 
 
@@ -110,29 +112,28 @@ def color_to_gray(new_mask, obj):
     ch1 = np.array(ch1, dtype=np.uint8)
     ch2 = np.array(ch2, dtype=np.uint8)
     ch3 = np.array(ch3, dtype=np.uint8)
-    mask = cv2.merge((ch1, ch3, ch2))
+    mask = cv2.merge((ch1, ch2, ch3))
     mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     return mask, np.unique(mask)[1]
 
-#===============================================================================
-#===============================================================================
-#===============================================================================
 
-mask = []
-with open('/work/datasets/video/colors') as file:
-    for line in file:
-        line = line.split('\n')[0]
-        line = line.split(' ')
-        line[2] = line[2].split('\t')
-        mask.append(line)
-image_class, image_regions = {}, {}
-for i in mask:
-    image_class[i[2][1]] = (int(i[0]), int(i[1]), int(i[2][0]))
-#print(image_class)
 
-for i, j in image_class.items():
-    image_regions[(j[0] * 1000000) + (j[1] * 1000) + j[2]] = i
-#print(image_regions)
+
+
+#=======================================================================================
+
+
+image_class = {'Roads': (0, 0, 0),
+               'Buildings': (100, 100, 100),
+               'Trees': (0, 125, 0),
+               'Grass': (0, 255, 0),
+               'Bare_Soil': (150, 80, 0),
+               'Water': (0, 0, 150),
+               'Railways': (255, 255, 0),
+               'Swimming Pools': (150, 150, 255),
+               'Background': (255, 255, 255)}
+
+image_regions = {777: 'Roads', 100100100: 'Buildings', 125000: 'Trees', 255000: 'Grass', 150080000: 'Bare_Soil', 150: 'Water', 255255000: 'Railways', 150150255: 'Swimming Pools', 255255255: 'Background'}
 
 #make meta.json
 classes = []
@@ -140,19 +141,19 @@ for title, color in image_class.items():
     temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
-json_dump(meta, '/work/datasets/video/my_project/meta.json')
+json_dump(meta, '/work/datasets/Zurich/my_project/meta.json')
 
 
 
-for object in os.listdir('/work/datasets/video/701_StillsRaw_full/'):
+for object in os.listdir('/work/datasets/Zurich/Zurich_dataset_v1.0/images_tif/'):
     name = object[:-4]
     print(name)
-    shutil.copy('/work/datasets/video/701_StillsRaw_full/' + object, '/work/datasets/video/my_project/dataset/img/' + object)
-    image = cv2.imread('/work/datasets/video/video_labels/' + name + '_L.png')
+    image = cv2.imread('/work/datasets/Zurich/Zurich_dataset_v1.0/groundtruth/' + name + '_GT.tif')
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image = np.array(image, dtype=np.uint32)
     new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
     new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
+    new_mask = np.where(new_mask != 0, new_mask, 777)
 
     foto_objects = []
     json_for_image = {'tags': [],
@@ -162,12 +163,6 @@ for object in os.listdir('/work/datasets/video/701_StillsRaw_full/'):
                                   'width': image.shape[1],
                                   'height': image.shape[0] }}
     for obj in np.unique(new_mask):
-        if obj == 0:
-            continue
-        try:
-            classTitle = image_regions[obj]
-        except Exception:
-            continue
         classTitle = image_regions[obj]
         mask, obj_new = color_to_gray(new_mask, obj)
         left_coner, mask_bool = coords_alternative(mask, obj_new)
@@ -183,4 +178,8 @@ for object in os.listdir('/work/datasets/video/701_StillsRaw_full/'):
                     "tags": [],
                     "points": {"interior": [], "exterior": []}}
             foto_objects.append(temp)
-    json_dump(json_for_image, '/work/datasets/video/my_project/dataset/ann/' + name + '.json')
+    json_dump(json_for_image, '/work/datasets/Zurich/my_project/dataset/ann/' + name + '.json')
+    foto = cv2.imread('/work/datasets/Zurich/Zurich_dataset_v1.0/images_tif/' + object)
+    foto *= 42
+    cv2.imwrite('/work/datasets/Zurich/my_project/dataset/img/' + name + '.png', foto)
+

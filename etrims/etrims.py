@@ -118,21 +118,19 @@ def color_to_gray(new_mask, obj):
 #===============================================================================
 #===============================================================================
 
-mask = []
-with open('/work/datasets/video/colors') as file:
-    for line in file:
-        line = line.split('\n')[0]
-        line = line.split(' ')
-        line[2] = line[2].split('\t')
-        mask.append(line)
+
+colors = [[0, 0, 0], [0, 0, 128], [0, 128, 0], [0, 128, 128], [128, 0, 0], [128, 0, 128], [0, 0, 64], [0, 0, 192], [0, 128, 64], [0, 128, 192], [128, 0, 64], [128, 128, 0], [128, 128, 128], [128, 0, 192], [128, 128, 64], [128, 128, 192], [0, 64, 0], [0, 64, 128], [0, 64, 64], [0, 64, 192], [0, 192, 0], [0, 192, 64], [0, 192, 128], [0, 192, 192], [64, 0, 0], [64, 0, 64], [64, 0, 128], [64, 0, 192], [64, 128, 0], [64, 128, 64], [64, 128, 128], [64, 128, 192], [128, 64, 0], [128, 64, 64], [128, 64, 128], [128, 64, 192], [128, 192, 0], [128, 192, 64], [128, 192, 128], [128, 192, 192], [192, 0, 0], [192, 0, 64], [192, 0, 128], [192, 128, 0], [192, 128, 128], [192, 0, 192], [192, 128, 64], [192, 128, 192], [0, 0, 32], [0, 0, 160], [0, 128, 32], [0, 128, 160], [64, 64, 0], [64, 64, 64], [64, 64, 128], [64, 64, 192], [64, 192, 0], [64, 192, 64], [64, 192, 128], [64, 192, 192], [128, 0, 32], [128, 0, 160], [192, 64, 0], [192, 64, 64], [192, 64, 128], [192, 64, 192], [192, 192, 0], [192, 192, 64], [192, 192, 128], [192, 192, 192]]
+
 image_class, image_regions = {}, {}
-for i in mask:
-    image_class[i[2][1]] = (int(i[0]), int(i[1]), int(i[2][0]))
-#print(image_class)
+for i in range(len(colors)):
+    image_class['obj' + str(i)] = colors[i]
 
 for i, j in image_class.items():
-    image_regions[(j[0] * 1000000) + (j[1] * 1000) + j[2]] = i
-#print(image_regions)
+    if (j[0] * 1000000) + (j[1] * 1000) + j[2] == 0:
+        image_regions[777] = i
+    else:
+        image_regions[(j[0] * 1000000) + (j[1] * 1000) + j[2]] = i
+
 
 #make meta.json
 classes = []
@@ -140,19 +138,19 @@ for title, color in image_class.items():
     temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
-json_dump(meta, '/work/datasets/video/my_project/meta.json')
+json_dump(meta, '/work/datasets/etrims-db_v1/my_project/meta.json')
 
 
-
-for object in os.listdir('/work/datasets/video/701_StillsRaw_full/'):
+t = '4'
+for object in os.listdir('/work/datasets/etrims-db_v1/images/04_etrims-ds/'):
     name = object[:-4]
     print(name)
-    shutil.copy('/work/datasets/video/701_StillsRaw_full/' + object, '/work/datasets/video/my_project/dataset/img/' + object)
-    image = cv2.imread('/work/datasets/video/video_labels/' + name + '_L.png')
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image = cv2.imread('/work/datasets/etrims-db_v1/annotations-object/04_etrims-ds/' + name + '.png')
+    #image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image = np.array(image, dtype=np.uint32)
     new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
     new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
+    new_mask = np.where(new_mask != 0, new_mask, 777)
 
     foto_objects = []
     json_for_image = {'tags': [],
@@ -162,11 +160,46 @@ for object in os.listdir('/work/datasets/video/701_StillsRaw_full/'):
                                   'width': image.shape[1],
                                   'height': image.shape[0] }}
     for obj in np.unique(new_mask):
-        if obj == 0:
-            continue
-        try:
-            classTitle = image_regions[obj]
-        except Exception:
+        classTitle = image_regions[obj]
+        mask, obj_new = color_to_gray(new_mask, obj)
+        left_coner, mask_bool = coords_alternative(mask, obj_new)
+        for i in range(len(left_coner)):
+            mask_bool[i] = mask_bool[i].astype(np.bool)
+            data = mask_2_base64(mask_bool[i])
+            temp = {"bitmap":
+                        {"origin": [left_coner[i][1], left_coner[i][0]],
+                         "data": data},
+                    "type": "bitmap",
+                    "classTitle": classTitle,
+                    "description": "",
+                    "tags": [],
+                    "points": {"interior": [], "exterior": []}}
+            foto_objects.append(temp)
+    json_dump(json_for_image, '/work/datasets/etrims-db_v1/my_project/dataset/ann/' + t + name + '.json')
+    shutil.copy('/work/datasets/etrims-db_v1/images/04_etrims-ds/' + object,
+                '/work/datasets/etrims-db_v1/my_project/dataset/img/' + t + name + '.jpg')
+
+t = '8'
+for object in os.listdir('/work/datasets/etrims-db_v1/images/08_etrims-ds/'):
+    name = object[:-4]
+    print(name)
+    image = cv2.imread('/work/datasets/etrims-db_v1/annotations-object/08_etrims-ds/' + name + '.png')
+    #image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image = np.array(image, dtype=np.uint32)
+    new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
+    new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
+    new_mask = np.where(new_mask != 0, new_mask, 777)
+
+    foto_objects = []
+    json_for_image = {'tags': [],
+                       'description': '',
+                        'objects': foto_objects,
+                              'size': {
+                                  'width': image.shape[1],
+                                  'height': image.shape[0] }}
+    for obj in np.unique(new_mask):
+        if not obj in image_regions.keys():
+            print(obj)
             continue
         classTitle = image_regions[obj]
         mask, obj_new = color_to_gray(new_mask, obj)
@@ -183,4 +216,6 @@ for object in os.listdir('/work/datasets/video/701_StillsRaw_full/'):
                     "tags": [],
                     "points": {"interior": [], "exterior": []}}
             foto_objects.append(temp)
-    json_dump(json_for_image, '/work/datasets/video/my_project/dataset/ann/' + name + '.json')
+    json_dump(json_for_image, '/work/datasets/etrims-db_v1/my_project/dataset/ann/' + t + name + '.json')
+    shutil.copy('/work/datasets/etrims-db_v1/images/08_etrims-ds/' + object,
+                '/work/datasets/etrims-db_v1/my_project/dataset/img/' + t + name + '.jpg')
