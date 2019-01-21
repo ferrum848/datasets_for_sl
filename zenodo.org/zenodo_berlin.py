@@ -102,6 +102,11 @@ def coords_alternative(mask, obj):
 
 
 def color_to_gray(new_mask, obj):
+    if obj == 0:
+        new_mask = np.where(new_mask != obj, new_mask, 777)
+        new_mask = np.where(new_mask == 777, new_mask, 0)
+        new_mask = np.where(new_mask != 777, new_mask, 123123123)
+        obj = 123123123
     obj1 = (obj - obj%1000000) // 1000000
     obj2 = (obj%1000000 - obj%1000) // 1000
     obj3 = obj%1000
@@ -112,63 +117,66 @@ def color_to_gray(new_mask, obj):
     ch1 = np.array(ch1, dtype=np.uint8)
     ch2 = np.array(ch2, dtype=np.uint8)
     ch3 = np.array(ch3, dtype=np.uint8)
-    mask = cv2.merge((ch1, ch2, ch3))
+    mask = cv2.merge((ch1, ch3, ch2))
     mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     return mask, np.unique(mask)[1]
 #===============================================================================
 #===============================================================================
 #===============================================================================
 
-import csv
+image_class = {'Roads': (255, 0, 0),
+               'Buildings': (0, 0, 255),
+               'Background': (255, 255, 255)}
 
-FILENAME = "/work/datasets/Driving_Dataset/labels.csv"
-slovar ={}
-with open(FILENAME, "r", newline="") as file:
-    reader = csv.reader(file)
-    for row in reader:
-        if row[4] != 'Frame':
-            if row[4] not in slovar.keys():
-                slovar[row[4]] = [[int(row[0]), int(row[1])], [int(row[2]), int(row[3])], row[5]]
-            else:
-                slovar[row[4]].extend([[int(row[0]), int(row[1])], [int(row[2]), int(row[3])], row[5]])
+image_regions = {255000000: 'Roads', 255: 'Buildings', 255255255: 'Background'}
 
-
-image_class = {'Car': (255, 0, 0),
-               'Truck': (0, 0, 255),
-               'Pedestrian': (255, 0, 255)}
-'''
 #make meta.json
 classes = []
 for title, color in image_class.items():
-    temp = {'title': title, 'shape': 'rectangle', 'color': color2code(color)}
+    temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
-json_dump(meta, '/work/datasets/Driving_Dataset/my_project/meta.json')
-'''
+json_dump(meta, '/work/datasets/zenodo/my_project/meta.json')
 
 
-for object in os.listdir('/work/datasets/Driving_Dataset/my_project/dataset/img/'):
-    name = object[:-4]
+for object in os.listdir('/work/datasets/zenodo/berlin/'):
+    if object[-9:-4] == 'abels':
+        name = object[:-4]
+    else:
+        new_name = object[:-10]
+        shutil.copy('/work/datasets/zenodo/berlin/' + object, '/work/datasets/zenodo/my_project/dataset/img/' + new_name + '.png')
+        continue
     print(name)
-    image = cv2.imread('/work/datasets/Driving_Dataset/my_project/dataset/img/' + object)
+    image = cv2.imread('/work/datasets/zenodo/berlin/' + name + '.png')
+    new_name = object[:-11]
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image = np.array(image, dtype=np.uint32)
+    new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
+    new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
 
     foto_objects = []
     json_for_image = {'tags': [],
-                        'description': '',
+                       'description': '',
                         'objects': foto_objects,
-                        'size': {
-                        'width': image.shape[1],
-                     'height': image.shape[0] }}
-    for i in range(0, len(slovar[object]), 3):
-        temp = {"bitmap": None,
-                        "type": "rectangle",
-                        "classTitle": slovar[object][i + 2],
-                        "description": "",
-                        "tags": [],
-                        "points": {"interior": [], "exterior": [slovar[object][i], slovar[object][i + 1]]}}
-        foto_objects.append(temp)
-    json_dump(json_for_image, '/work/datasets/Driving_Dataset/my_project/dataset/ann/' + name + '.json')
-
-
-
-
+                              'size': {
+                                  'width': image.shape[1],
+                                  'height': image.shape[0] }}
+    for obj in np.unique(new_mask):
+        if len(np.unique(new_mask)) == 1:
+            continue
+        classTitle = image_regions[obj]
+        mask, obj_new = color_to_gray(new_mask, obj)
+        left_coner, mask_bool = coords_alternative(mask, obj_new)
+        for i in range(len(left_coner)):
+            mask_bool[i] = mask_bool[i].astype(np.bool)
+            data = mask_2_base64(mask_bool[i])
+            temp = {"bitmap":
+                        {"origin": [left_coner[i][1], left_coner[i][0]],
+                         "data": data},
+                    "type": "bitmap",
+                    "classTitle": classTitle,
+                    "description": "",
+                    "tags": [],
+                    "points": {"interior": [], "exterior": []}}
+            foto_objects.append(temp)
+    json_dump(json_for_image, '/work/datasets/zenodo/my_project/dataset/ann/' + new_name + '.json')

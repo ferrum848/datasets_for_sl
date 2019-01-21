@@ -45,8 +45,10 @@ def unique_color(image):
 
 
 def unique_color_new(image):
+    start = time.time()
     a = np.unique(image.reshape(-1, image.shape[2]), axis=0)
     result = np.array(a).tolist()
+    print('unique_color_new  ', time.time() - start)
     return result
 
 
@@ -100,6 +102,11 @@ def coords_alternative(mask, obj):
 
 
 def color_to_gray(new_mask, obj):
+    if obj == 0:
+        new_mask = np.where(new_mask != obj, new_mask, 777)
+        new_mask = np.where(new_mask == 777, new_mask, 0)
+        new_mask = np.where(new_mask != 777, new_mask, 123123123)
+        obj = 123123123
     obj1 = (obj - obj%1000000) // 1000000
     obj2 = (obj%1000000 - obj%1000) // 1000
     obj3 = obj%1000
@@ -113,69 +120,63 @@ def color_to_gray(new_mask, obj):
     mask = cv2.merge((ch1, ch3, ch2))
     mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     return mask, np.unique(mask)[1]
-
 #===============================================================================
 #===============================================================================
 #===============================================================================
 
+image_class = {'Roads': (255, 0, 0),
+               'Buildings': (0, 0, 255),
+               'Background': (255, 255, 255)}
 
-image = cv2.imread('/work/datasets/fbms59/ground/030_gt.png')
-print(unique_color_new(image))
+image_regions = {255000000: 'Roads', 255: 'Buildings', 255255255: 'Background'}
 
-image_class = {}
-for i in range(256):
-    temp = 'obj' + str(i)
-    image_class[temp] = (i, i, i)
-
-image_regions = {}
-for i, j in image_class.items():
-    image_regions[j[0]] = i
-'''
+#make meta.json
 classes = []
 for title, color in image_class.items():
     temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
-json_dump(meta, '/work/datasets/fbms59/my_project/meta.json')
-'''
-for object in os.listdir('/work/datasets/fbms59/img/'):
-    name = object[-6:-4]
+json_dump(meta, '/work/datasets/zenodo/my_project/meta.json')
+
+
+for object in os.listdir('/work/datasets/zenodo/chicago/'):
+    if object[-9:-4] == 'abels':
+        name = object[:-4]
+    else:
+        new_name = object[:-10]
+        shutil.copy('/work/datasets/zenodo/chicago/' + object, '/work/datasets/zenodo/my_project/dataset/img/' + new_name + '.png')
+        continue
     print(name)
-    shutil.copy('/work/datasets/fbms59/img/' + object, '/work/datasets/fbms59/my_project/dataset/img/' + object)
-    image = cv2.imread('/work/datasets/fbms59/ground/' + '0' + name + '_gt.png')
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    image = cv2.imread('/work/datasets/zenodo/chicago/' + name + '.png')
+    new_name = object[:-11]
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     image = np.array(image, dtype=np.uint32)
+    new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
+    new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
 
     foto_objects = []
     json_for_image = {'tags': [],
-                      'description': '',
-                      'objects': foto_objects,
-                      'size': {
-                          'width': image.shape[1],
-                          'height': image.shape[0]
-                      }}
-
-    for obj in np.unique(image):
+                       'description': '',
+                        'objects': foto_objects,
+                              'size': {
+                                  'width': image.shape[1],
+                                  'height': image.shape[0] }}
+    for obj in np.unique(new_mask):
+        if len(np.unique(new_mask)) == 1:
+            continue
         classTitle = image_regions[obj]
-        if obj == 0:
-            image = np.where(image != obj, image, 300)
-            obj = 300
-        mask_bool = np.where(image == obj, image, 0)
-        mask_bool, obj = color_to_gray(mask_bool, obj)
-        left_coner, mask_bool = coords_alternative(mask_bool, obj)
+        mask, obj_new = color_to_gray(new_mask, obj)
+        left_coner, mask_bool = coords_alternative(mask, obj_new)
         for i in range(len(left_coner)):
             mask_bool[i] = mask_bool[i].astype(np.bool)
             data = mask_2_base64(mask_bool[i])
             temp = {"bitmap":
-                    {"origin": [left_coner[i][1], left_coner[i][0]],
-                    "data": data},
+                        {"origin": [left_coner[i][1], left_coner[i][0]],
+                         "data": data},
                     "type": "bitmap",
                     "classTitle": classTitle,
                     "description": "",
                     "tags": [],
                     "points": {"interior": [], "exterior": []}}
             foto_objects.append(temp)
-    json_dump(json_for_image, '/work/datasets/fbms59/my_project/dataset/ann/' + object[:-4] + '.json')
-
-
-
+    json_dump(json_for_image, '/work/datasets/zenodo/my_project/dataset/ann/' + new_name + '.json')

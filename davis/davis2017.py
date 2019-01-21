@@ -45,10 +45,8 @@ def unique_color(image):
 
 
 def unique_color_new(image):
-    start = time.time()
     a = np.unique(image.reshape(-1, image.shape[2]), axis=0)
     result = np.array(a).tolist()
-    print('unique_color_new  ', time.time() - start)
     return result
 
 
@@ -112,91 +110,91 @@ def color_to_gray(new_mask, obj):
     ch1 = np.array(ch1, dtype=np.uint8)
     ch2 = np.array(ch2, dtype=np.uint8)
     ch3 = np.array(ch3, dtype=np.uint8)
-    mask = cv2.merge((ch1, ch2, ch3))
+    mask = cv2.merge((ch1, ch3, ch2))
     mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     return mask, np.unique(mask)[1]
+
 #===============================================================================
 #===============================================================================
 #===============================================================================
 
+image_class = {'fon': (255, 0, 0),
+              'object': (255, 0, 255),
+               'object2': (0, 0, 255),
+               'object3': (0, 255, 255),
+               'object4': (0, 255, 0),
+               'object5': (255, 255, 0),
+               'object6': (128, 0, 64),
+               'object7': (64, 128, 64),
+               'object8': (128, 0, 128),
+               'object9': (192, 224, 224)}
 
+image_regions = {777: 'fon',
+            128: 'object',
+                 128000: 'object2',
+                 128128: 'object3',
+                 128000000: 'object4',
+                 128000128: 'object5',
+                 128128000: 'object6',
+                 128128128: 'object7',
+                 64: 'object8',
+                 192224224: 'object9'}
 
-
-
-image_class = {'Door' : (255, 255, 0),
-             'Shop':(0, 128, 0),
-             'Balcony':(0, 0, 255),
-             'Window':(128, 255, 0),
-             'Wall':(255, 0, 0),
-             'Sky':(0, 255, 255),
-             'Roof':(211, 211, 211),
-             'Unknown': (0, 0, 0)}
-
-
-image_regions = {8: 'Door',
-             1: 'Shop',
-             2: 'Balcony',
-             3: 'Window',
-             4: 'Wall',
-             5: 'Sky',
-             6: 'Roof',
-            9 : 'Unknown'}
-
-'''
-#make meta.json
 classes = []
 for title, color in image_class.items():
     temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
-json_dump(meta, '/work/datasets/ParisArt/my_project/meta.json')
-'''
-
-for object in os.listdir('/work/datasets/ParisArt/my_project/dataset/img/'):
-    name = object[:-4]
-    print(name)
-    image = cv2.imread('/work/datasets/ParisArt/my_project/dataset/img/' + object)
-
-    mask = []
-    with open('/work/datasets/ParisArt/labels/' + name + '.txt') as file:
-        for line in file:
-            line = line.split('\n')[0]
-            line = line.split(' ')
-            mask.append(line)
-    mask = np.array(mask, int)
-    mask = np.where(mask != 0, mask, 8)
-    mask = np.where(mask != -1, mask, 9)
+json_dump(meta, '/work/datasets/DAVIS2017/my_project/meta.json')
 
 
-    foto_objects = []
-    json_for_image = {'tags': [],
-                      'description': '',
-                        'objects': foto_objects,
-                        'size': {
-                        'width': image.shape[1],
-                        'height': image.shape[0] }}
 
-    for obj in np.unique(mask):
-        classTitle = image_regions[obj]
-        mask_new = np.where(mask == obj, mask, 0)
-        mask_new = np.array(mask_new, dtype=np.uint8)
-        mask_new = cv2.merge((mask_new, mask_new, mask_new))
-        mask_new = cv2.cvtColor(mask_new, cv2.COLOR_BGR2GRAY)
-        left_coner, mask_bool = coords_alternative(mask_new, obj)
-        for i in range(len(left_coner)):
-            mask_bool[i] = mask_bool[i].astype(np.bool)
-            data = mask_2_base64(mask_bool[i])
-            temp = {"bitmap":
-                        {"origin": [left_coner[i][1], left_coner[i][0]],
-                         "data": data},
-                    "type": "bitmap",
-                    "classTitle": classTitle,
-                    "description": "",
-                    "tags": [],
-                    "points": {"interior": [], "exterior": []}}
-            foto_objects.append(temp)
-    json_dump(json_for_image, '/work/datasets/ParisArt/my_project/dataset/ann/' + name + '.json')
+runner = os.walk('/work/datasets/DAVIS2017/JPEGImages/Full-Resolution/')
 
+sch = 1
+for dir, subdir, file in runner:
+    if len(file) == 0:
+        continue
+    for object in os.listdir(dir + '/'):
+        q = str(sch) + object
+        if q in os.listdir('/work/datasets/DAVIS2017/my_project/dataset/img/'):
+            continue
+        name = object[:-4]
+        print(dir, name)
+        image = cv2.imread(dir[:25] + 'Annotations' + dir[35:] + '/' + name + '.png')
+        #image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image = np.array(image, dtype=np.uint32)
+        new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
+        new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
+        new_mask = np.where(new_mask != 0, new_mask, 777)
 
+        foto_objects = []
+        json_for_image = {'tags': [],
+                           'description': '',
+                            'objects': foto_objects,
+                                  'size': {
+                                      'width': image.shape[1],
+                                      'height': image.shape[0] }}
+        for obj in np.unique(new_mask):
+            classTitle = image_regions[obj]
+            if len(np.unique(new_mask)) == 1:
+                continue
+            mask, obj_new = color_to_gray(new_mask, obj)
+            left_coner, mask_bool = coords_alternative(mask, obj_new)
+            for i in range(len(left_coner)):
+                mask_bool[i] = mask_bool[i].astype(np.bool)
+                data = mask_2_base64(mask_bool[i])
+                temp = {"bitmap":
+                            {"origin": [left_coner[i][1], left_coner[i][0]],
+                             "data": data},
+                        "type": "bitmap",
+                        "classTitle": classTitle,
+                        "description": "",
+                        "tags": [],
+                        "points": {"interior": [], "exterior": []}}
+                foto_objects.append(temp)
+        json_dump(json_for_image, '/work/datasets/DAVIS2017/my_project/dataset/ann/' + str(sch) + name + '.json')
+        shutil.copy(dir + '/' + object, '/work/datasets/DAVIS2017/my_project/dataset/img/' + str(sch) + object)
+        sch += 1
 
 

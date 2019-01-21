@@ -1,5 +1,5 @@
 import numpy as np
-import cv2, random, os, time, json, base64, zlib
+import cv2, random, os, time, json, base64, zlib, shutil
 from PIL import Image
 import scipy.io
 import io
@@ -102,6 +102,11 @@ def coords_alternative(mask, obj):
 
 
 def color_to_gray(new_mask, obj):
+    if obj == 0 or obj == 256:
+        new_mask = np.where(new_mask != obj, new_mask, 777)
+        new_mask = np.where(new_mask == 777, new_mask, 0)
+        new_mask = np.where(new_mask != 777, new_mask, 123123123)
+        obj = 123123123
     obj1 = (obj - obj%1000000) // 1000000
     obj2 = (obj%1000000 - obj%1000) // 1000
     obj3 = obj%1000
@@ -112,72 +117,63 @@ def color_to_gray(new_mask, obj):
     ch1 = np.array(ch1, dtype=np.uint8)
     ch2 = np.array(ch2, dtype=np.uint8)
     ch3 = np.array(ch3, dtype=np.uint8)
-    mask = cv2.merge((ch1, ch2, ch3))
+    mask = cv2.merge((ch1, ch3, ch2))
     mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     return mask, np.unique(mask)[1]
 
+#===============================================================================
+#===============================================================================
+#===============================================================================
+
+image_class = {'obj0': [0, 0, 0], 'obj1': [255, 0, 0], 'obj2': [0, 255, 0], 'obj3': [0, 0, 255], 'obj4': [255, 255, 0], 'obj5': [255, 0, 255], 'obj6': [0, 255, 255], 'obj7': [140, 0, 120], 'obj8': [0, 100, 200], 'obj9': [240, 240, 240], 'obj10': [170, 0, 170], 'obj11': [0, 0, 170], 'obj12': [170, 170, 0], 'obj13': [178, 77, 0], 'obj14': [0, 0, 134], 'obj15': [152, 0, 0], 'obj16': [124, 178, 47], 'obj17': [178, 21, 0], 'obj18': [60, 178, 111], 'obj19': [178, 5, 0], 'obj20': [0, 0, 143], 'obj21': [178, 29, 0], 'obj22': [0, 35, 178]}
+image_regions = {0: 'obj0', 1: 'obj1', 2: 'obj2', 3: 'obj3', 4: 'obj4', 5: 'obj5', 6: 'obj6', 7: 'obj7', 8: 'obj8', 9: 'obj9', 10: 'obj10', 11: 'obj11', 12: 'obj12', 13: 'obj13', 14: 'obj14',15: 'obj15',16: 'obj16',17: 'obj17',18: 'obj12',18: 'obj12',19: 'obj19',20: 'obj20', 21: 'obj21', 22: 'obj22'}
 
 
-
-
-'''
-#make meta.json
 classes = []
 for title, color in image_class.items():
     temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
-json_dump(meta, '/work/datasets/Zurich/my_project/meta.json')
-'''
-#=======================================================================================
+json_dump(meta, '/work/datasets/graz/General_test_fullres/my_project/meta.json')
 
 
-image_class = {'Roads': (0, 0, 0),
-               'Buildings': (100, 100, 100),
-               'Trees': (0, 125, 0),
-               'Grass': (0, 255, 0),
-               'Bare_Soil': (150, 80, 0),
-               'Water': (0, 0, 150),
-               'Railways': (255, 255, 0),
-               'Swimming Pools': (150, 150, 255),
-               'Background': (255, 255, 255)}
+runner = os.walk('/work/datasets/graz/General_test_fullres/Images/')
+sch = 1
+for dir, subdir, file in runner:
+    if len(file) == 0:
+        continue
+    for object in os.listdir(dir + '/'):
+        name = object[:-4]
+        print(name)
+        image = cv2.imread(dir + '/' + object)
+        mat = scipy.io.loadmat(dir[:41] + 'Groundtruth' + dir[47:] + '/' + name + '.mat')
+        mask_new = mat['groundTruth'][0][0][0][0][0]
 
-image_regions = {777: 'Roads', 100100100: 'Buildings', 125000: 'Trees', 255000: 'Grass', 150080000: 'Bare_Soil', 150: 'Water', 255255000: 'Railways', 150150255: 'Swimming Pools', 255255255: 'Background'}
-
-
-
-for object in os.listdir('/work/datasets/Zurich/images_tif_new/'):
-    name = object[:-4]
-    print(name)
-    image = cv2.imread('/work/datasets/Zurich/groundtruth/' + name + '_GT.tif')
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    image = np.array(image, dtype=np.uint32)
-    new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
-    new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
-    new_mask = np.where(new_mask != 0, new_mask, 777)
-
-    foto_objects = []
-    json_for_image = {'tags': [],
-                       'description': '',
-                        'objects': foto_objects,
-                              'size': {
-                                  'width': image.shape[1],
-                                  'height': image.shape[0] }}
-    for obj in np.unique(new_mask):
-        classTitle = image_regions[obj]
-        mask, obj_new = color_to_gray(new_mask, obj)
-        left_coner, mask_bool = coords_alternative(mask, obj_new)
-        for i in range(len(left_coner)):
-            mask_bool[i] = mask_bool[i].astype(np.bool)
-            data = mask_2_base64(mask_bool[i])
-            temp = {"bitmap":
-                        {"origin": [left_coner[i][1], left_coner[i][0]],
-                         "data": data},
-                    "type": "bitmap",
-                    "classTitle": classTitle,
-                    "description": "",
-                    "tags": [],
-                    "points": {"interior": [], "exterior": []}}
-            foto_objects.append(temp)
-    json_dump(json_for_image, '/work/datasets/Zurich/my_project/dataset/ann/' + name + '.json')
-
+        foto_objects = []
+        json_for_image = {'tags': [],
+                          'description': '',
+                          'objects': foto_objects,
+                          'size': {
+                              'width': image.shape[1],
+                              'height': image.shape[0]}}
+        for obj in np.unique(mask_new):
+            classTitle = image_regions[obj]
+            if len(np.unique(mask_new)) == 1:
+                continue
+            mask, obj_new = color_to_gray(mask_new, obj)
+            left_coner, mask_bool = coords_alternative(mask, obj_new)
+            for i in range(len(left_coner)):
+                mask_bool[i] = mask_bool[i].astype(np.bool)
+                data = mask_2_base64(mask_bool[i])
+                temp = {"bitmap":
+                            {"origin": [left_coner[i][1], left_coner[i][0]],
+                             "data": data},
+                        "type": "bitmap",
+                        "classTitle": classTitle,
+                        "description": "",
+                        "tags": [],
+                        "points": {"interior": [], "exterior": []}}
+                foto_objects.append(temp)
+        json_dump(json_for_image, '/work/datasets/graz/General_test_fullres/my_project/dataset/ann/' + str(sch) + name + '.json')
+        shutil.copy(dir + '/' + object, '/work/datasets/graz/General_test_fullres/my_project/dataset/img/' + str(sch) + object)
+        sch += 1

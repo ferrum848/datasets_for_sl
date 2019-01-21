@@ -45,8 +45,10 @@ def unique_color(image):
 
 
 def unique_color_new(image):
+    start = time.time()
     a = np.unique(image.reshape(-1, image.shape[2]), axis=0)
     result = np.array(a).tolist()
+    print('unique_color_new  ', time.time() - start)
     return result
 
 
@@ -100,6 +102,11 @@ def coords_alternative(mask, obj):
 
 
 def color_to_gray(new_mask, obj):
+    if obj == 0 or obj == 256:
+        new_mask = np.where(new_mask != obj, new_mask, 777)
+        new_mask = np.where(new_mask == 777, new_mask, 0)
+        new_mask = np.where(new_mask != 777, new_mask, 123123123)
+        obj = 123123123
     obj1 = (obj - obj%1000000) // 1000000
     obj2 = (obj%1000000 - obj%1000) // 1000
     obj3 = obj%1000
@@ -118,66 +125,55 @@ def color_to_gray(new_mask, obj):
 #===============================================================================
 #===============================================================================
 
+image_class = {'obj0': [0, 0, 0], 'obj1': [255, 255, 0], 'obj2': [255, 0, 255], 'obj3': [0, 255, 255], 'obj4': [0, 255, 0], 'obj5': [255, 0, 0], 'obj6': [0, 0, 255], 'obj7': [127, 0, 217], 'obj8': [248, 248, 248]}
+image_regions = {0: 'obj0', 1: 'obj1', 2: 'obj2', 3: 'obj3', 4: 'obj4', 5: 'obj5', 6: 'obj6', 7: 'obj7', 8: 'obj8'}
 
-colors = [[0, 0, 0], [0, 0, 128], [0, 128, 0], [0, 128, 128], [128, 0, 0], [128, 0, 128], [0, 0, 64], [0, 0, 192], [0, 128, 64], [0, 128, 192], [128, 0, 64], [128, 128, 0], [128, 128, 128], [128, 0, 192], [128, 128, 64], [128, 128, 192], [0, 64, 0]]
 
-
-image_class, image_regions = {}, {}
-for i in range(len(colors)):
-    image_class['obj' + str(i)] = colors[i]
-print(image_class)
-
-for i, j in image_class.items():
-    if (j[0] * 1000000) + (j[1] * 1000) + j[2] == 0:
-        image_regions[777] = i
-    else:
-        image_regions[(j[0] * 1000000) + (j[1] * 1000) + j[2]] = i
-print(image_regions)
-
-'''
-#make meta.json
 classes = []
 for title, color in image_class.items():
     temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
-json_dump(meta, '/work/datasets/etrims-db_v1/my_project/meta.json')
-'''
+json_dump(meta, '/work/datasets/PennFudanPed/my_project/meta.json')
 
-for object in os.listdir('/work/datasets/etrims-db_v1/images/04_etrims-ds/'):
+
+
+
+for object in os.listdir('/work/datasets/PennFudanPed/PNGImages/'):
     name = object[:-4]
     print(name)
-    shutil.copy('/work/datasets/etrims-db_v1/images/04_etrims-ds/' + object, '/work/datasets/etrims-db_v1/my_project/dataset/img/' + object)
-    image = cv2.imread('/work/datasets/etrims-db_v1/annotations-object/04_etrims-ds/' + name + '.png')
-    #image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    image = cv2.imread('/work/datasets/PennFudanPed/PedMasks/' + name + '_mask.png')
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     image = np.array(image, dtype=np.uint32)
-    new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
-    new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
-    new_mask = np.where(new_mask != 0, new_mask, 777)
 
     foto_objects = []
     json_for_image = {'tags': [],
-                       'description': '',
-                        'objects': foto_objects,
-                              'size': {
-                                  'width': image.shape[1],
-                                  'height': image.shape[0] }}
-    for obj in np.unique(new_mask):
+                      'description': '',
+                      'objects': foto_objects,
+                      'size': {
+                          'width': image.shape[1],
+                          'height': image.shape[0]
+                      }}
+
+    for obj in np.unique(image):
         classTitle = image_regions[obj]
-        mask, obj_new = color_to_gray(new_mask, obj)
-        left_coner, mask_bool = coords_alternative(mask, obj_new)
+        if len(np.unique(image)) == 1:
+            continue
+        mask_bool, obj = color_to_gray(image, obj)
+        left_coner, mask_bool = coords_alternative(mask_bool, obj)
         for i in range(len(left_coner)):
             mask_bool[i] = mask_bool[i].astype(np.bool)
             data = mask_2_base64(mask_bool[i])
             temp = {"bitmap":
-                        {"origin": [left_coner[i][1], left_coner[i][0]],
-                         "data": data},
-                    "type": "bitmap",
-                    "classTitle": classTitle,
-                    "description": "",
-                    "tags": [],
-                    "points": {"interior": [], "exterior": []}}
+                    {"origin": [left_coner[i][1], left_coner[i][0]],
+                        "data": data},
+                        "type": "bitmap",
+                        "classTitle": classTitle,
+                        "description": "",
+                        "tags": [],
+                        "points": {"interior": [], "exterior": []}}
             foto_objects.append(temp)
-    json_dump(json_for_image, '/work/datasets/etrims-db_v1/my_project/dataset/ann/' + name + '.json')
-
+    json_dump(json_for_image, '/work/datasets/PennFudanPed/my_project/dataset/ann/' + name + '.json')
+    shutil.copy('/work/datasets/PennFudanPed/PNGImages/' + object, '/work/datasets/PennFudanPed/my_project/dataset/img/' + object)
+    
 

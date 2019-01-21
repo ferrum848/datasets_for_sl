@@ -45,8 +45,10 @@ def unique_color(image):
 
 
 def unique_color_new(image):
+    start = time.time()
     a = np.unique(image.reshape(-1, image.shape[2]), axis=0)
     result = np.array(a).tolist()
+    print('unique_color_new  ', time.time() - start)
     return result
 
 
@@ -100,6 +102,11 @@ def coords_alternative(mask, obj):
 
 
 def color_to_gray(new_mask, obj):
+    if obj == 0 or obj == 256:
+        new_mask = np.where(new_mask != obj, new_mask, 777)
+        new_mask = np.where(new_mask == 777, new_mask, 0)
+        new_mask = np.where(new_mask != 777, new_mask, 123123123)
+        obj = 123123123
     obj1 = (obj - obj%1000000) // 1000000
     obj2 = (obj%1000000 - obj%1000) // 1000
     obj3 = obj%1000
@@ -113,59 +120,48 @@ def color_to_gray(new_mask, obj):
     mask = cv2.merge((ch1, ch3, ch2))
     mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     return mask, np.unique(mask)[1]
+
 #===============================================================================
 #===============================================================================
 #===============================================================================
 
+image_class = {'obj0': [0, 0, 0], 'obj1': [255, 0, 0], 'obj2': [0, 255, 0], 'obj3': [0, 0, 255], 'obj4': [255, 255, 0], 'obj5': [255, 0, 255], 'obj6': [0, 255, 255], 'obj7': [140, 0, 120], 'obj8': [0, 100, 200], 'obj9': [240, 240, 240], 'obj10': [170, 0, 170], 'obj11': [0, 0, 170], 'obj12': [170, 170, 0], 'obj13': [178, 77, 0], 'obj14': [0, 0, 134], 'obj15': [152, 0, 0], 'obj16': [124, 178, 47], 'obj17': [178, 21, 0], 'obj18': [60, 178, 111], 'obj19': [178, 5, 0], 'obj20': [0, 0, 143], 'obj21': [178, 29, 0], 'obj22': [0, 35, 178]}
+image_regions = {0: 'obj0', 1: 'obj1', 2: 'obj2', 3: 'obj3', 4: 'obj4', 5: 'obj5', 6: 'obj6', 7: 'obj7', 8: 'obj8', 9: 'obj9', 10: 'obj10', 11: 'obj11', 12: 'obj12', 13: 'obj13', 14: 'obj14',15: 'obj15',16: 'obj16',17: 'obj17',18: 'obj12',18: 'obj12',19: 'obj19',20: 'obj20', 21: 'obj21', 22: 'obj22'}
 
 
-image_class = {}
-for i in range(256):
-    temp = 'obj' + str(i)
-    image_class[temp] = (i, i, i)
-
-image_regions = {}
-for i, j in image_class.items():
-    image_regions[j[0]] = i
-'''
-#make meta.json
 classes = []
 for title, color in image_class.items():
     temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
-json_dump(meta, '/work/datasets/coco/my_project/meta.json')
-'''
+json_dump(meta, '/work/datasets/graz/General_train_fullres/my_project/meta.json')
 
-for object in os.listdir('/work/datasets/coco/val2017_foto/'):
-    name = object[:-4]
-    print(name)
-    shutil.copy('/work/datasets/coco/val2017_foto/' + object, '/work/datasets/coco/my_project/dataset/img/' + object)
-    #shutil.copy('/work/datasets/coco/val2017/' + name + '.png', '/work/datasets/coco/test/' + name + '.png')
-    image = cv2.imread('/work/datasets/coco/val2017/' + name + '.png')
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    image = np.array(image, dtype=np.uint32)
 
-    foto_objects = []
-    json_for_image = {'tags': [],
-                      'description': '',
-                      'objects': foto_objects,
-                      'size': {
-                          'width': image.shape[1],
-                          'height': image.shape[0]
-                      }}
+runner = os.walk('/work/datasets/graz/General_train_fullres/Images/')
+sch = 1
+for dir, subdir, file in runner:
+    if len(file) == 0:
+        continue
+    for object in os.listdir(dir + '/'):
+        name = object[:-4]
+        print(name)
+        image = cv2.imread(dir + '/' + object)
+        mat = scipy.io.loadmat(dir[:42] + 'Groundtruth' + dir[48:] + '/' + name + '.mat')
+        mask_new = mat['groundTruth'][0][0][0][0][0]
 
-    for obj in np.unique(image):
-        classTitle = image_regions[obj]
-        if obj == 255:
-            continue
-        elif obj == 0:
-            image = np.where(image != obj, image, 300)
-            obj = 300
-        mask_bool = np.where(image == obj, image, 0)
-        try:
-            mask_bool, obj = color_to_gray(mask_bool, obj)
-            left_coner, mask_bool = coords_alternative(mask_bool, obj)
+        foto_objects = []
+        json_for_image = {'tags': [],
+                          'description': '',
+                          'objects': foto_objects,
+                          'size': {
+                              'width': image.shape[1],
+                              'height': image.shape[0]}}
+        for obj in np.unique(mask_new):
+            classTitle = image_regions[obj]
+            if len(np.unique(mask_new)) == 1:
+                continue
+            mask, obj_new = color_to_gray(mask_new, obj)
+            left_coner, mask_bool = coords_alternative(mask, obj_new)
             for i in range(len(left_coner)):
                 mask_bool[i] = mask_bool[i].astype(np.bool)
                 data = mask_2_base64(mask_bool[i])
@@ -178,8 +174,6 @@ for object in os.listdir('/work/datasets/coco/val2017_foto/'):
                         "tags": [],
                         "points": {"interior": [], "exterior": []}}
                 foto_objects.append(temp)
-        except Exception:
-            shutil.copy('/work/datasets/coco/val2017/' + name + '.png', '/work/datasets/coco/test/' + name + '.png')
-            continue
-    json_dump(json_for_image, '/work/datasets/coco/my_project/dataset/ann/' + name + '.json')
-
+        json_dump(json_for_image, '/work/datasets/graz/General_train_fullres/my_project/dataset/ann/' + str(sch) + name + '.json')
+        shutil.copy(dir + '/' + object, '/work/datasets/graz/General_train_fullres/my_project/dataset/img/' + str(sch) + object)
+        sch += 1

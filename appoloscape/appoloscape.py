@@ -1,5 +1,5 @@
 import numpy as np
-import cv2, random, os, time, json, base64, zlib
+import cv2, random, os, time, json, base64, zlib, shutil
 from PIL import Image
 import scipy.io
 import io
@@ -102,6 +102,11 @@ def coords_alternative(mask, obj):
 
 
 def color_to_gray(new_mask, obj):
+    if obj == 0:
+        new_mask = np.where(new_mask != obj, new_mask, 777)
+        new_mask = np.where(new_mask == 777, new_mask, 0)
+        new_mask = np.where(new_mask != 777, new_mask, 123123123)
+        obj = 123123123
     obj1 = (obj - obj%1000000) // 1000000
     obj2 = (obj%1000000 - obj%1000) // 1000
     obj3 = obj%1000
@@ -112,80 +117,75 @@ def color_to_gray(new_mask, obj):
     ch1 = np.array(ch1, dtype=np.uint8)
     ch2 = np.array(ch2, dtype=np.uint8)
     ch3 = np.array(ch3, dtype=np.uint8)
-    mask = cv2.merge((ch1, ch2, ch3))
+    mask = cv2.merge((ch1, ch3, ch2))
     mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
     return mask, np.unique(mask)[1]
 
-#=============================================
+#===============================================================================
+#===============================================================================
+#===============================================================================
+
+
+
+
+
 image_class = {'others': (0, 0, 0), 'rover': (1, 1, 1), 'sky': (17, 17, 17), 'car': (33, 33, 33), 'car_groups': (161, 161, 161), 'motorbicycle': (34, 34, 34), 'motorbicycle_group': (162, 162, 162), 'bicycle': (35, 35, 35), 'bicycle_group': (163, 163, 163), 'person': (36, 36, 36), 'person_group': (164, 164, 164), 'rider': (37, 37, 37), 'rider_group': (165, 165, 165), 'truck': (38, 38, 38), 'truck_group': (166, 166, 166), 'bus': (39, 39, 39), 'bus_group': (167, 167, 167), 'tricycle': (40, 40, 40), 'tricycle_group': (168, 168, 168), 'road': (49, 49, 49), 'siderwalk': (50, 50, 50), 'traffic_cone': (65, 65, 65), 'road_pile': (66, 66, 66), 'fence': (67, 67, 67), 'traffic_light': (81, 81, 81), 'pole': (82, 82, 82), 'traffic_sign': (83, 83, 83), 'wall': (84, 84, 84), 'dustbin': (85, 85, 85), 'billboard': (86, 86, 86), 'building': (97, 97, 97), 'bridge': (98, 98, 98), 'tunnel': (99, 99, 99), 'overpass': (100, 100, 100), 'vegatation': (113, 113, 113), 'unlabeled': (255, 255, 255)}
 
 image_regions = {}
 for i, j in image_class.items():
     image_regions[j[0]] = i
-print(image_regions)
 
+#make meta.json
+classes = []
+for title, color in image_class.items():
+    temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
+    classes.append(temp)
+meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
+json_dump(meta, '/work/appoloscape/my_project/meta.json')
 #=========================================================
 
-for object in os.listdir('/work/appoloscape/my_project/dataset/img/'):
-    name = object[:-4]
-    print(name)
-    image = cv2.imread('/work/appoloscape/my_project/segm/' + name + '_bin.png')
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    #print(np.unique(image))
 
-    foto_objects = []
-    json_for_image = {'tags': [],
-                       'description': '',
-                        'objects': foto_objects,
-                              'size': {
-                                  'width': image.shape[1],
-                                  'height': image.shape[0] }}
+runner = os.walk('/work/appoloscape/img/road04_ins/ColorImage/')
 
-    with open('/work/appoloscape/my_project/segm/' + name + '.json') as f:
-        data = json.load(f)
-    polyg = data['objects']
-    list_of_objects, list_of_labels = [], []
-    for i in polyg:
-        label = i['label']
-        for j in i['polygons']:
-            list_of_labels.append(label)
-            list_of_objects.append(j)
+for dir, subdir, file in runner:
+    if len(file) == 0:
+        continue
+    for object in os.listdir(dir + '/'):
+        name = object[:-4]
+        print(name)
+        image = cv2.imread(dir[:33] +'Label' + dir[43:] + '/' + name + '_bin.png')
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        #print(np.unique(image))
 
-    for obj in np.unique(image):
-        if obj == 0:
-            continue
-        elif obj in list_of_labels:
-            continue
-        classTitle = image_regions[obj]
-        mask = np.where(image == obj, image, 0)
-        left_coner, mask_bool = coords_new(mask, obj)
-        mask_bool = mask_bool.astype(np.bool)
-        data = mask_2_base64(mask_bool)
-        temp = {"bitmap":
-                    {"origin": [left_coner[1], left_coner[0]],
-                     "data": data},
-                "type": "bitmap",
-                "classTitle": classTitle,
-                "description": "",
-                "tags": [],
-                "points": {"interior": [], "exterior": []}}
-        foto_objects.append(temp)
+        foto_objects = []
+        json_for_image = {'tags': [],
+                           'description': '',
+                            'objects': foto_objects,
+                                  'size': {
+                                      'width': image.shape[1],
+                                      'height': image.shape[0] }}
 
-    for i in range(len(list_of_labels)):
-        obj, res = list_of_labels[i], list_of_objects[i]
-        classTitle = image_regions[obj]
-        mask = np.where(image == obj, image, 0)
-        min_left_temp = (min(res, key=lambda x: x[0])[0], min(res, key=lambda x: x[1])[1])
-        min_left = [min_left_temp[1], min_left_temp[0]]
-        max_right_temp = (max(res, key=lambda x: x[0])[0], max(res, key=lambda x: x[1])[1])
-        max_right = [max_right_temp[1], max_right_temp[0]]
-        result = mask[min_left[0]: max_right[0] + 1, min_left[1]: max_right[1] + 1]
+        with open(dir[:33] +'Label' + dir[43:] + '/' + name + '.json') as f:
+            data = json.load(f)
+        polyg = data['objects']
+        list_of_objects, list_of_labels = [], []
+        for i in polyg:
+            label = i['label']
+            for j in i['polygons']:
+                list_of_labels.append(label)
+                list_of_objects.append(j)
 
-        left_coner, mask_bool = min_left, result
-
-        mask_bool = mask_bool.astype(np.bool)
-        data = mask_2_base64(mask_bool)
-        temp = {"bitmap":
+        for obj in np.unique(image):
+            if len(np.unique(image)) == 1:
+                continue
+            elif obj in list_of_labels:
+                continue
+            classTitle = image_regions[obj]
+            mask = np.where(image == obj, image, 0)
+            left_coner, mask_bool = coords_new(mask, obj)
+            mask_bool = mask_bool.astype(np.bool)
+            data = mask_2_base64(mask_bool)
+            temp = {"bitmap":
                         {"origin": [left_coner[1], left_coner[0]],
                          "data": data},
                     "type": "bitmap",
@@ -193,11 +193,32 @@ for object in os.listdir('/work/appoloscape/my_project/dataset/img/'):
                     "description": "",
                     "tags": [],
                     "points": {"interior": [], "exterior": []}}
+            foto_objects.append(temp)
 
-        foto_objects.append(temp)
-    json_dump(json_for_image, '/work/appoloscape/my_project/dataset/ann/' + name + '.json')
+        for i in range(len(list_of_labels)):
+            obj, res = list_of_labels[i], list_of_objects[i]
+            classTitle = image_regions[obj]
+            mask = np.where(image == obj, image, 0)
+            min_left_temp = (min(res, key=lambda x: x[0])[0], min(res, key=lambda x: x[1])[1])
+            min_left = [min_left_temp[1], min_left_temp[0]]
+            max_right_temp = (max(res, key=lambda x: x[0])[0], max(res, key=lambda x: x[1])[1])
+            max_right = [max_right_temp[1], max_right_temp[0]]
+            result = mask[min_left[0]: max_right[0] + 1, min_left[1]: max_right[1] + 1]
+
+            left_coner, mask_bool = min_left, result
+
+            mask_bool = mask_bool.astype(np.bool)
+            data = mask_2_base64(mask_bool)
+            temp = {"bitmap":
+                            {"origin": [left_coner[1], left_coner[0]],
+                             "data": data},
+                        "type": "bitmap",
+                        "classTitle": classTitle,
+                        "description": "",
+                        "tags": [],
+                        "points": {"interior": [], "exterior": []}}
+
+            foto_objects.append(temp)
+        json_dump(json_for_image, '/work/appoloscape/my_project/dataset/ann/' + name + '.json')
+        shutil.copy(dir + '/' + object, '/work/appoloscape/my_project/dataset/img/' + object)
 #==========================================================================================================
-
-
-
-

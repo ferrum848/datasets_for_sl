@@ -45,8 +45,10 @@ def unique_color(image):
 
 
 def unique_color_new(image):
+    start = time.time()
     a = np.unique(image.reshape(-1, image.shape[2]), axis=0)
     result = np.array(a).tolist()
+    print('unique_color_new  ', time.time() - start)
     return result
 
 
@@ -100,6 +102,11 @@ def coords_alternative(mask, obj):
 
 
 def color_to_gray(new_mask, obj):
+    if obj == 0 or obj == 256:
+        new_mask = np.where(new_mask != obj, new_mask, 777)
+        new_mask = np.where(new_mask == 777, new_mask, 0)
+        new_mask = np.where(new_mask != 777, new_mask, 123123123)
+        obj = 123123123
     obj1 = (obj - obj%1000000) // 1000000
     obj2 = (obj%1000000 - obj%1000) // 1000
     obj3 = obj%1000
@@ -118,55 +125,84 @@ def color_to_gray(new_mask, obj):
 #===============================================================================
 #===============================================================================
 
-image_class = {'fon': (255, 0, 0),
-              'bear': (0, 255, 255)}
 
-image_regions = {777: 'fon',
-            255255255: 'bear'}
-'''
+
+image_regions, image_class = {}, {}
+with open('/work/datasets/pascal2010/labels.txt', "r") as file:
+    all_lines = file.readlines()
+    for line in all_lines:
+        line = line.split('\n')[0].split(':')
+        image_regions[int(line[0])] = line[1][1:]
+
+random_colors = []
+while True:
+    if len(random_colors) == 459:
+        break
+    temp1 = random.randint(0, 255)
+    temp2 = random.randint(0, 255)
+    temp3 = random.randint(0, 255)
+    temp = [temp1, temp2, temp3]
+    if not temp in random_colors:
+        random_colors.append(temp)
+
+vals = []
+for i in image_regions.values():
+    vals.append(i)
+
+for i in range(len(vals)):
+    image_class[vals[i]] = random_colors[i]
+
+
+
 classes = []
 for title, color in image_class.items():
     temp = {'title': title, 'shape': 'bitmap', 'color': color2code(color)}
     classes.append(temp)
 meta = {'classes': classes, 'tags_images': [], "tags_objects": []}
-json_dump(meta, '/work/datasets/graz/DAVIS/my_project/meta.json')
-'''
+json_dump(meta, '/work/datasets/pascal2010/my_project/meta.json')
 
-for object in os.listdir('/work/datasets/graz/DAVIS/JPEGImages/480p/bear/'):
+
+
+
+for object in os.listdir('/work/datasets/pascal2010/trainval/'):
     name = object[:-4]
     print(name)
-    shutil.copy('/work/datasets/graz/DAVIS/JPEGImages/480p/bear/' + object, '/work/datasets/graz/DAVIS/my_project/dataset/img/' + object)
-    image = cv2.imread('/work/datasets/graz/DAVIS/Annotations/480p/bear/' + name + '.png')
-    #image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    image = np.array(image, dtype=np.uint32)
-    new_mask = np.zeros((image.shape[0], image.shape[1]), dtype=np.uint32)
-    new_mask = new_mask + (image[:, :, 0] * 1000000) + (image[:, :, 1] * 1000) + image[:, :, 2]
-    new_mask = np.where(new_mask != 0, new_mask, 777)
+    image = cv2.imread('/work/datasets/pascal2010/VOCdevkit/VOC2010/JPEGImages/' + name + '.jpg')
+    jname = name + '.jpg'
+    if jname in os.listdir('/work/datasets/pascal2010/my_project/dataset/img/'):
+        continue
 
     foto_objects = []
     json_for_image = {'tags': [],
-                       'description': '',
-                        'objects': foto_objects,
-                              'size': {
-                                  'width': image.shape[1],
-                                  'height': image.shape[0] }}
-    for obj in np.unique(new_mask):
+                      'description': '',
+                      'objects': foto_objects,
+                      'size': {
+                          'width': image.shape[1],
+                          'height': image.shape[0]
+                      }}
+
+    mat = scipy.io.loadmat('/work/datasets/pascal2010/trainval/' + object)
+    mask = mat['LabelMap']
+
+    for obj in np.unique(mask):
         classTitle = image_regions[obj]
-        mask, obj_new = color_to_gray(new_mask, obj)
-        left_coner, mask_bool = coords_alternative(mask, obj_new)
+        if len(np.unique(mask)) == 1:
+            continue
+        mask_bool, obj = color_to_gray(mask, obj)
+        left_coner, mask_bool = coords_alternative(mask_bool, obj)
         for i in range(len(left_coner)):
             mask_bool[i] = mask_bool[i].astype(np.bool)
             data = mask_2_base64(mask_bool[i])
             temp = {"bitmap":
-                        {"origin": [left_coner[i][1], left_coner[i][0]],
-                         "data": data},
-                    "type": "bitmap",
-                    "classTitle": classTitle,
-                    "description": "",
-                    "tags": [],
-                    "points": {"interior": [], "exterior": []}}
+                    {"origin": [left_coner[i][1], left_coner[i][0]],
+                        "data": data},
+                        "type": "bitmap",
+                        "classTitle": classTitle,
+                        "description": "",
+                        "tags": [],
+                        "points": {"interior": [], "exterior": []}}
             foto_objects.append(temp)
-    json_dump(json_for_image, '/work/datasets/graz/DAVIS/my_project/dataset/ann/' + name + '.json')
-
+    json_dump(json_for_image, '/work/datasets/pascal2010/my_project/dataset/ann/' + name + '.json')
+    shutil.copy('/work/datasets/pascal2010/VOCdevkit/VOC2010/JPEGImages/' + name + '.jpg', '/work/datasets/pascal2010/my_project/dataset/img/' + name + '.jpg')
 
 
